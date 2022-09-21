@@ -6,6 +6,7 @@ import sys
 import shutil
 from typing import Dict, Tuple
 from concurrent import futures
+from urllib.parse import urlparse
 import warnings
 
 
@@ -14,7 +15,7 @@ import warnings
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Create heatmaps for MIL models.')
-    parser.add_argument('slide_paths', metavar='SLIDE', type=Path,
+    parser.add_argument('slide_urls', metavar='SLIDE_URL', type=urlparse,
                         nargs='+', help='slides to create heatmaps for')
     parser.add_argument('-m', '--model-path', type=Path, required=True,
                         help='MIL model used to generate attention / score maps')
@@ -81,6 +82,7 @@ import numpy as np
 from fastai.vision.all import load_learner
 from pyzstd import ZstdFile
 import PIL
+from sftp import get_wsi
 
 # supress DecompressionBombWarning: yes, our files are really that big
 PIL.Image.MAX_IMAGE_PIXELS = None
@@ -200,16 +202,18 @@ if __name__ == '__main__':
     masks: Dict[Path, torch.Tensor] = {}
 
     print('Extracting features, attentions and scores...')
-    for slide_path in (progress := tqdm(args.slide_paths, leave=False)):
-        progress.set_description(slide_path.stem)
-        slide = openslide.OpenSlide(str(slide_path))
-        slide_cache_dir = args.cache_dir/slide_path.stem
+    for slide_url in (progress := tqdm(args.slide_urls, leave=False)):
+        slide_name = Path(slide_url.path).stem
+        progress.set_description(slide_name)
+        slide_cache_dir = args.cache_dir/slide_name
         slide_cache_dir.mkdir(parents=True, exist_ok=True)
 
         # Load WSI as one image
         if (slide_jpg := slide_cache_dir/'slide.jpg').exists():
             slide_array = np.array(PIL.Image.open(slide_jpg))
         else:
+            slide_path = get_wsi(slide_url, cache_dir=args.cache_dir)
+            slide = openslide.OpenSlide(str(slide_path))
             slide_array = load_slide(slide)
             PIL.Image.fromarray(slide_array).save(slide_jpg)
 
